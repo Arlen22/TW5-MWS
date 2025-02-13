@@ -1,4 +1,4 @@
-# multiwiki2
+# TiddlyWiki5 MultiWikiServer
 
 This project implements a multi-protocol wiki server that demonstrates how various classes work together:
 
