@@ -1,6 +1,6 @@
 # TiddlyWiki5 MultiWikiServer
 
-This project implements a multi-protocol wiki server that demonstrates how various classes work together:
+This implements a server that abstracts the various HTTP protocols into a single request state object. 
 
 - **server.ts**: Sets up HTTP/1 and HTTP/2 servers using specialized Streamer classes (Streamer1 for HTTP/1 and Streamer2 for HTTP/2) to handle incoming requests. The Listener classes initialize the servers and delegate request handling.
 - **router.ts**: Implements routing rules and conditions. The Router identifies the correct route for an incoming request and creates a StateObject that encapsulates the request details, allowing the route handler to process the request body accordingly.
