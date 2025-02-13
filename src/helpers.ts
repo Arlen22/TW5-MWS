@@ -1,5 +1,6 @@
 import { IncomingHttpHeaders, OutgoingHttpHeaders, ServerResponse } from "node:http";
 import { Streamer } from "./server";
+import { Router } from './router';
 import { createHash } from "node:crypto";
 import * as zlib from "node:zlib";
 import { ok } from "node:assert";
@@ -12,11 +13,11 @@ Options include:
 - `cbPartEnd()` - invoked when a file finishes being received
 - `cbFinished(err)` - invoked when the all the form data has been processed
 */
-export function streamMultipartData(this: object, request: Streamer, options: {
+export function streamMultipartData(this: Router, request: Streamer, options: {
   cbPartStart: (headers: IncomingHttpHeaders, name: string | null, filename: string | null) => void,
-  cbPartChunk: (chunk: Uint8Array) => void,
+  cbPartChunk: (chunk: Buffer) => void,
   cbPartEnd: () => void,
-  cbFinished: (err: string | null) => void
+  cbFinished: (err: Error | string | null) => void
 }) {
   return new Promise<void>((resolve, reject) => {
     // Check that the Content-Type is multipart/form-data
@@ -90,7 +91,7 @@ export function streamMultipartData(this: object, request: Streamer, options: {
           const boundaryIndex = buffer.indexOf(boundaryBuffer);
           if (boundaryIndex >= 0) {
             // Return the part up to the boundary minus the terminating LF CR
-            options.cbPartChunk(Uint8Array.prototype.slice.call(buffer, 0, boundaryIndex - 2));
+            options.cbPartChunk(Buffer.from(buffer, 0, boundaryIndex - 2));
             options.cbPartEnd();
             processingPart = false;
             // this starts at the boundary marker, which gets picked up on the next loop
@@ -131,10 +132,7 @@ headers: response headers (they will be augmented with an `Etag` header)
 data: the data to send (passed to the end method of the response instance)
 encoding: the encoding of the data to send (passed to the end method of the response instance)
 */
-export async function sendResponse(this: {
-  enableBrowserCache: boolean;
-  enableGzip: boolean;
-}, streamer: Streamer, statusCode: number, headers: OutgoingHttpHeaders, data: string | Buffer, encoding?: NodeJS.BufferEncoding) {
+export async function sendResponse(this: Router, streamer: Streamer, statusCode: number, headers: OutgoingHttpHeaders, data: string | Buffer, encoding?: NodeJS.BufferEncoding) {
   if (this.enableBrowserCache && (statusCode == 200)) {
     var hash = createHash('md5');
     // Put everything into the hash that could change and invalidate the data that
