@@ -4,6 +4,7 @@ import { sendResponse } from './helpers';
 import { Streamer } from './server';
 import { IncomingHttpHeaders } from 'node:http';
 import { AuthState } from './AuthState';
+import { PassThrough } from 'node:stream';
 
 export interface Route {
   useACL: any;
@@ -194,16 +195,7 @@ export class StateObject<F extends BodyFormat, P extends string[] = string[]> {
   boot: any;
   server: any;
 
-  // auth has to be handled separately
-  // authenticatedUser: any;
-  // authenticatedUsername?: string | undefined;
-  // authorizationType: string;
-  // allowAnon: boolean;
-  // anonAccessConfigured: boolean;
-  // allowAnonReads: boolean;
-  // allowAnonWrites: boolean;
-  // showAnonConfig: boolean;
-  // firstGuestUser: boolean;
+
   makeTiddlerEtag(options: { bag_name: string; tiddler_id: string; }) {
     if (options.bag_name || options.tiddler_id) {
       return "\"tiddler:" + options.bag_name + "/" + options.tiddler_id + "\"";
@@ -215,5 +207,53 @@ export class StateObject<F extends BodyFormat, P extends string[] = string[]> {
 
   isBodyFormat<T extends BodyFormat>(format: T): this is StateObject<T> {
     return this.bodyFormat as BodyFormat === format;
+  }
+
+
+  sendSSE(retryMilliseconds: number) {
+    if (typeof retryMilliseconds !== "number" || retryMilliseconds < 0)
+      throw new Error("Invalid retryMilliseconds: must be a non-negative number");
+
+    const stream = new PassThrough();
+
+    this.send(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      "connection": "keep-alive",
+      "x-accel-buffering": "no",
+    });
+
+    stream.write(": This page is a server-sent event stream. It will continue loading until you close it.\n");
+    stream.write(": https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events\n");
+    stream.write("\n");
+
+    /**
+     * 
+     * @param {string} eventName The event name. If zero-length, the field is omitted
+     * @param eventData The data to send. Must be stringify-able to JSON.
+     * @param {string} eventId The event id. If zero-length, the field is omitted.
+     */
+    const write = (eventName: string, eventData: any, eventId: string) => {
+      if (typeof eventName !== "string")
+        throw new Error("Event name must be a string (a zero-length string disables the field)");
+      if (eventName.includes("\n"))
+        throw new Error("Event name cannot contain newlines");
+      if (typeof eventId !== "string")
+        throw new Error("Event ID must be a string");
+      if (eventId.includes("\n"))
+        throw new Error("Event ID cannot contain newlines");
+
+      stream.write([
+        eventName && `event: ${eventName}`,
+        `data: ${JSON.stringify(eventData)}`,
+        eventId && `id: ${eventId}`,
+        retryMilliseconds && `retry: ${retryMilliseconds}`,
+      ].filter(e => e).join("\n") + "\n\n");
+    }
+
+    const close = () => stream.end();
+
+    return { write, close };
+
   }
 }

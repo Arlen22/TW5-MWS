@@ -7,7 +7,7 @@ import { Stream } from 'node:stream';
 import { Readable } from 'stream';
 import { createServer, IncomingMessage, Server, ServerResponse, IncomingHttpHeaders as NodeIncomingHeaders, OutgoingHttpHeaders } from 'node:http';
 import { streamMultipartData } from './helpers';
-import { BodyFormat, StateObject, Router } from './router';
+import { Router } from './router';
 
 interface IncomingHttpHeaders extends NodeIncomingHeaders {
   "accept-encoding"?: string;
@@ -152,15 +152,18 @@ class Streamer2 extends Streamer {
     return this.stream.writableEnded;
   }
 }
-
+/**
+ * The HTTP2 shims used in the request handler are only used for HTTP2 requests. 
+ * The NodeJS server actually calls the HTTP1 parser for all HTTP1 requests. 
+ */
 class Streamer1 extends Streamer {
   host: string;
   method: string;
   url: URL;
   headers: http1.IncomingHttpHeaders;
   constructor(
-    private req: http2.Http2ServerRequest | IncomingMessage,
-    private res: http2.Http2ServerResponse<http2.Http2ServerRequest> | ServerResponse,
+    private req: IncomingMessage,
+    private res: ServerResponse,
     router: Router
   ) {
     super(router);
@@ -220,18 +223,24 @@ class Streamer1 extends Streamer {
     return this.res.writableEnded;
   }
 }
-
+function is<T>(a: any, b: boolean): a is T {
+  return b;
+}
 class ListenerHTTPS {
   server: http2.Http2SecureServer;
   constructor(router: Router, key: Buffer, cert: Buffer) {
 
-    this.server = http2.createSecureServer({
-      key,
-      cert,
-      allowHTTP1: true,
-    }, (req, res) => {
+    this.server = http2.createSecureServer({ key, cert, allowHTTP1: true, });
+
+    this.server.on("request", (
+      req: IncomingMessage | http2.Http2ServerRequest,
+      res: ServerResponse | http2.Http2ServerResponse
+    ) => {
       // these are handled in the stream handler
-      if (req.httpVersion === "2.0") return;
+      if (is<http2.Http2ServerRequest>(req, req.httpVersionMajor > 1)) return;
+      // complete dud for type checking. this will never be true.
+      if (is<http2.Http2ServerResponse>(res, req.httpVersionMajor > 1)) return;
+
       const streamer = new Streamer1(req, res, router);
       router.handle(streamer).catch(streamer.catcher);
     });
