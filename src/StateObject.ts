@@ -14,8 +14,8 @@ export class StateObject<F extends BodyFormat = BodyFormat, P extends string[] =
   get method() { return this.streamer.method; }
   get headers() { return this.streamer.headers; }
   get host() { return this.streamer.host; }
-  get ended() { return this.streamer.ended; }
   get urlInfo() { return this.streamer.url; }
+  get headersSent() { return this.streamer.headersSent; }
 
   get reader() { return this.streamer.reader; }
 

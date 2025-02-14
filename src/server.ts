@@ -89,8 +89,8 @@ export class Router {
     const state = new StateObject(streamer, route, params, authState, this);
     const method = streamer.method;
 
-    // anything should throw before this, but just in case
-    if (streamer.ended) return;
+    // anything that sends a response before this should have thrown, but just in case
+    if (streamer.headersSent) return;
 
     if (route.bodyFormat === "stream" || ["GET", "HEAD"].includes(method))
       return await route.handler(state);
@@ -290,8 +290,9 @@ export class Streamer {
     this.res.end();
     return STREAM_ENDED;
   }
-  get ended() {
-    return this.res.writableEnded;
+
+  get headersSent(){
+    return this.res.headersSent;
   }
 }
 
