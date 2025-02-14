@@ -1,106 +1,10 @@
 import * as queryString from 'node:querystring';
 import { Readable } from 'stream';
 import { recieveMultipartData as readMultipartData, sendResponse } from './helpers';
-import { Streamer } from './server';
+import { BodyFormat, Route, Router, Streamer } from './server';
 import { IncomingHttpHeaders } from 'node:http';
 import { AuthState } from './AuthState';
 import { PassThrough } from 'node:stream';
-
-export interface Route {
-  useACL: any;
-  method: string;
-  entityName: any;
-  csrfDisable: any;
-  bodyFormat: BodyFormat;
-  path: RegExp;
-  handler: (state: StateObject<BodyFormat>) => Promise<void>;
-}
-
-export class Router {
-  routes: Route[] = [
-    {
-      bodyFormat: "string",
-      csrfDisable: false,
-      entityName: "tiddler",
-      method: "GET",
-      path: /.*/,
-      useACL: false,
-      handler: async (state) => {
-        console.log("Handling tiddler route");
-        state.sendFile(200, {}, { reqpath: "./index.html", root: process.cwd(), });
-      },
-    }
-  ];
-  pathPrefix: string = "";
-  enableBrowserCache: boolean = true;
-  enableGzip: boolean = true;
-  csrfDisable: boolean = false;
-  servername: string = "";
-  variables = new Map();
-  get(name: string): string {
-    return this.variables.get(name) || "";
-  }
-
-  async handle(streamer: Streamer) {
-
-    const authState = new AuthState(this);
-
-    await authState.checkStreamer(streamer);
-
-    const routeData = this.findRoute(streamer, this.pathPrefix);
-    if (!routeData) return streamer.sendString(404, {}, "Not found", "utf8");
-    const { route, params } = routeData;
-
-    await authState.checkRoute(route);
-
-    // Optionally output debug info
-    if (this.get("debug-level") !== "none") {
-      console.log("Request path:", JSON.stringify(streamer.url));
-      console.log("Request headers:", JSON.stringify(streamer.headers));
-      console.log(authState.toDebug());
-    }
-    const state = new StateObject(streamer, route, params, authState, this);
-    const method = streamer.method;
-
-    // anything should throw before this, but just in case
-    if (streamer.ended) return;
-
-    if (route.bodyFormat === "stream" || ["GET", "HEAD"].includes(method))
-      return await route.handler(state);
-
-    const buffer = await state.readBody();
-    if (state.isBodyFormat("string")) {
-      state.data = buffer.toString("utf8");
-    } else if (state.isBodyFormat("www-form-urlencoded")) {
-      state.data = queryString.parse(buffer.toString("utf8"));
-    } else if (state.isBodyFormat("buffer")) {
-      state.data = buffer;
-    } else {
-      return state.sendString(400, {}, "Invalid bodyFormat: " + route.bodyFormat, "utf8");
-    }
-    return await route.handler(state);
-
-  }
-
-  findRoute(streamer: Streamer, pathPrefix: string): { route: Route; params: string[]; } | null {
-    const { method, url } = streamer;
-    let testPath = url.pathname || "/";
-    if (pathPrefix && testPath.startsWith(pathPrefix)) {
-      testPath = testPath.slice(pathPrefix.length) || "/";
-    }
-    for (const potentialRoute of this.routes) {
-      const match = potentialRoute.path.exec(testPath);
-      if (match && (method === potentialRoute.method ||
-        (method === "POST" && potentialRoute.method === "PUT"))) {
-        return { route: potentialRoute, params: match.slice(1) };
-      }
-    }
-    return null;
-  }
-
-}
-
-export type BodyFormat = "stream" | "string" | "buffer" | "www-form-urlencoded";
 
 // This class abstracts the request/response cycle into a single object.
 // It hides most of the details from the routes, allowing us to easily change the underlying server implementation.

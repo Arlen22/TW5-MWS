@@ -1,5 +1,5 @@
-import { Route, Router } from "./router";
-import { Streamer } from "./server";
+
+import { Route, Router, Streamer } from "./server";
 
 const authLevelNeededForMethod: Record<string, "readers" | "writers" | undefined> = {
   "GET": "readers",
