@@ -35,7 +35,8 @@ Everything needs to be strongly typed. When done right, bugs are rare, and code 
 At first the temptation is always to try to make Typescript allow all of Javascript's dynamic typing, but not everything that can be done in Javascript always should be done. I've found that it is much simpler to just work with Typescript's typing the way it prefers. That tends to be a lot of objects and interfaces, clear separation of concerns, and strictly rigid type signatures.
 
 - Null is the negative of an object. False is the negative of true. If you want to indicate the absence of an object, use null. You can also make some properties optional, or use a union type to indicate two possible scenarios.  
-- Rather than trying to put optional arguments in the middle of a function, for instance, it's better to have an options object at the end, or second to last if you need a callback, and then just always leave it there. 
+- Rather than trying to put optional arguments in the middle of a function, for instance, it's better to have an options object at the end, or second to last if you need a callback, and then just always leave it there. Don't make options optional and then put the callback there instead if you don't specify options. It doesn't work well. 
+- Speaking of callbacks: **Promises!**
 - It often works better to have a separate function for each call signature. Javascript doesn't police overloads at all, and Typescript isn't very flexible with all the things people try to shove into their functions. If you need to loop over an array or an object, it's usually better to have loopArray and loopObject. If you actually need it to support both, you probably want to use `(Array.isArray(e) ? e : Object.entries(e))`.
 
 But while it may be less flexible, it is a lot more readable and reliable. When you look at a function, you don't have to guess what is supposed to be going in there, or depend on Javascript coercing values around. 
