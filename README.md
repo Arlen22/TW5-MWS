@@ -1,6 +1,6 @@
 # TiddlyWiki5 MultiWikiServer
 
-Proof of concept for a TypeScript based implementation.
+Possible TypeScript-based implementation of the MultiWikiServer.
 
 ## How the server classes work together
 
