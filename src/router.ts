@@ -1,6 +1,6 @@
 import * as queryString from 'node:querystring';
 import { Readable } from 'stream';
-import { sendResponse } from './helpers';
+import { recieveMultipartData as readMultipartData, sendResponse } from './helpers';
 import { Streamer } from './server';
 import { IncomingHttpHeaders } from 'node:http';
 import { AuthState } from './AuthState';
@@ -72,7 +72,20 @@ export interface MwsServerState {
 }
 
 export class Router {
-  routes: Route[] = [];
+  routes: Route[] = [
+    {
+      bodyFormat: "string",
+      csrfDisable: false,
+      entityName: "tiddler",
+      method: "GET",
+      path: /.*/,
+      useACL: false,
+      handler: async (state) => {
+        console.log("Handling tiddler route");
+        state.sendFile(200, {}, { reqpath: "./index.html", root: process.cwd(), });
+      },
+    }
+  ];
   pathPrefix: string = "";
   enableBrowserCache: boolean = true;
   enableGzip: boolean = true;
@@ -90,22 +103,17 @@ export class Router {
     await authState.checkStreamer(streamer);
 
     const routeData = this.findRoute(streamer, this.pathPrefix);
-    if (!routeData) return streamer.send(404, {}, { data: "Not found", encoding: "utf8" });
+    if (!routeData) return streamer.sendString(404, {}, "Not found", "utf8");
     const { route, params } = routeData;
 
     await authState.checkRoute(route);
-
-    if (!this.csrfDisable && !route.csrfDisable && authState?.authLevelNeeded === "writers" && streamer.headers["x-requested-with"] !== "TiddlyWiki")
-      return streamer.send(403, {}, { data: "'X-Requested-With' header required to login to '" + this.servername + "'", encoding: "utf8" });
 
     // Optionally output debug info
     if (this.get("debug-level") !== "none") {
       console.log("Request path:", JSON.stringify(streamer.url));
       console.log("Request headers:", JSON.stringify(streamer.headers));
-      console.log("authenticatedUsername:", authState?.username);
+      console.log(authState.toDebug());
     }
-
-
     const state = new StateObject(streamer, route, params, authState, this);
     const method = streamer.method;
 
@@ -123,8 +131,7 @@ export class Router {
     } else if (state.isBodyFormat("buffer")) {
       state.data = buffer;
     } else {
-      state.send(400, {}, { data: "Invalid bodyFormat: " + route.bodyFormat, encoding: "utf8" });
-      return;
+      return state.sendString(400, {}, "Invalid bodyFormat: " + route.bodyFormat, "utf8");
     }
     return await route.handler(state);
 
@@ -149,7 +156,10 @@ export class Router {
 }
 
 export type BodyFormat = "stream" | "string" | "buffer" | "www-form-urlencoded";
-export class StateObject<F extends BodyFormat, P extends string[] = string[]> {
+
+// This class abstracts the request/response cycle into a single object.
+// It hides most of the details from the routes, allowing us to easily change the underlying server implementation.
+export class StateObject<F extends BodyFormat = BodyFormat, P extends string[] = string[]> {
 
   get url() { return this.streamer.url; }
   get method() { return this.streamer.method; }
@@ -157,18 +167,22 @@ export class StateObject<F extends BodyFormat, P extends string[] = string[]> {
   get host() { return this.streamer.host; }
   get ended() { return this.streamer.ended; }
   get urlInfo() { return this.streamer.url; }
+
   get reader() { return this.streamer.reader; }
 
   readBody = this.streamer.readBody.bind(this.streamer);
-  send = this.streamer.send.bind(this.streamer);
+  readMultipartData = readMultipartData.bind(this.router, this);
+
+  sendEmpty = this.streamer.sendEmpty.bind(this.streamer);
+  sendString = this.streamer.sendString.bind(this.streamer);
+  sendBuffer = this.streamer.sendBuffer.bind(this.streamer);
+  sendStream = this.streamer.sendStream.bind(this.streamer);
   sendFile = this.streamer.sendFile.bind(this.streamer);
   end = this.streamer.end.bind(this.streamer);
 
-  sendResponse = sendResponse.bind(this.router, this.streamer);
+  sendResponse = sendResponse.bind(this.router, this);
 
-  // enableBrowserCache: boolean = this.router.enableBrowserCache;
-  // enableGzip: boolean = this.router.enableGzip;
-  // pathPrefix: string = this.router.pathPrefix;
+
   get enableBrowserCache() { return this.router.enableBrowserCache; }
   get enableGzip() { return this.router.enableGzip; }
   get pathPrefix() { return this.router.pathPrefix; }
@@ -204,7 +218,7 @@ export class StateObject<F extends BodyFormat, P extends string[] = string[]> {
     }
   }
 
-
+  /** type-narrowing helper function. This affects anywhere T is used. */
   isBodyFormat<T extends BodyFormat>(format: T): this is StateObject<T> {
     return this.bodyFormat as BodyFormat === format;
   }
@@ -216,12 +230,12 @@ export class StateObject<F extends BodyFormat, P extends string[] = string[]> {
 
     const stream = new PassThrough();
 
-    this.send(200, {
+    this.sendStream(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-cache",
       "connection": "keep-alive",
       "x-accel-buffering": "no",
-    });
+    }, stream);
 
     stream.write(": This page is a server-sent event stream. It will continue loading until you close it.\n");
     stream.write(": https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events\n");

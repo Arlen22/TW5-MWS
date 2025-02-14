@@ -1,6 +1,6 @@
 import { IncomingHttpHeaders, OutgoingHttpHeaders, ServerResponse } from "node:http";
 import { Streamer } from "./server";
-import { Router } from './router';
+import { Router, StateObject } from './router';
 import { createHash } from "node:crypto";
 import * as zlib from "node:zlib";
 import { ok } from "node:assert";
@@ -13,7 +13,7 @@ Options include:
 - `cbPartEnd()` - invoked when a file finishes being received
 - `cbFinished(err)` - invoked when the all the form data has been processed
 */
-export function streamMultipartData(this: Router, request: Streamer, options: {
+export function recieveMultipartData(this: Router, request: StateObject<any, any>, options: {
   cbPartStart: (headers: IncomingHttpHeaders, name: string | null, filename: string | null) => void,
   cbPartChunk: (chunk: Buffer) => void,
   cbPartEnd: () => void,
@@ -132,7 +132,7 @@ headers: response headers (they will be augmented with an `Etag` header)
 data: the data to send (passed to the end method of the response instance)
 encoding: the encoding of the data to send (passed to the end method of the response instance)
 */
-export async function sendResponse(this: Router, streamer: Streamer, statusCode: number, headers: OutgoingHttpHeaders, data: string | Buffer, encoding?: NodeJS.BufferEncoding) {
+export async function sendResponse(this: Router, state: StateObject<any, any>, statusCode: number, headers: OutgoingHttpHeaders, data: string | Buffer, encoding?: NodeJS.BufferEncoding) {
   if (this.enableBrowserCache && (statusCode == 200)) {
     var hash = createHash('md5');
     // Put everything into the hash that could change and invalidate the data that
@@ -151,13 +151,13 @@ export async function sendResponse(this: Router, streamer: Streamer, statusCode:
     // If one matches, do not send the data but tell the browser to use the
     // cached data.
     // We do not implement "*" as it makes no sense here.
-    var ifNoneMatch = streamer.headers["if-none-match"];
+    var ifNoneMatch = state.headers["if-none-match"];
     if (ifNoneMatch) {
       var matchParts = ifNoneMatch.split(",").map(function (etag) {
         return etag.replace(/^[ "]+|[ "]+$/g, "");
       });
       if (matchParts.indexOf(contentDigest) != -1) {
-        return streamer.send(304, headers);
+        return state.sendEmpty(304, headers);
       }
     }
   }
@@ -167,7 +167,7 @@ export async function sendResponse(this: Router, streamer: Streamer, statusCode:
   data is inefficient.
   */
   if (this.enableGzip && (data.length > 2048)) {
-    var acceptEncoding = streamer.headers["accept-encoding"] || "";
+    var acceptEncoding = state.headers["accept-encoding"] || "";
     if (/\bdeflate\b/.test(acceptEncoding)) {
       headers["Content-Encoding"] = "deflate";
       data = await promisify(zlib.deflate)(data);
@@ -176,8 +176,12 @@ export async function sendResponse(this: Router, streamer: Streamer, statusCode:
       data = await promisify(zlib.gzip)(data);
     }
   }
-  if (typeof data === "string") ok(encoding, "encoding must be set for string data");
-  return streamer.send(statusCode, headers, typeof data === "string" ? { data, encoding: encoding! } : data);
+  if (typeof data === "string") {
+    ok(encoding, "encoding must be set for string data");
+    return state.sendString(statusCode, headers, data, encoding);
+  } else {
+    return state.sendBuffer(statusCode, headers, data);
+  }
 }
 
 
@@ -229,3 +233,6 @@ interface Server {
   wiki: any;
   boot: any;
 }
+
+
+export function is<T>(a: any, b: boolean): a is T { return b; }
