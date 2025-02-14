@@ -16,61 +16,6 @@ export interface Route {
   handler: (state: StateObject<BodyFormat>) => Promise<void>;
 }
 
-export interface MwsServerState {
-  // The wiki instance used by the server.
-  wiki: any;
-  // Boot configuration object.
-  boot: any;
-  // Reference to the server instance.
-  server: any;
-  // Parsed URL information from the incoming request.
-  urlInfo: URL;
-  // Query parameters derived from the request URL.
-  queryParameters: queryString.ParsedUrlQuery;
-  // Optional prefix to remove from the pathname.
-  pathPrefix: string;
-  // Function to send a response to the client.
-  sendResponse: (
-    statusCode: number,
-    headers: Record<string, any>,
-    data: string | Buffer,
-    encoding?: BufferEncoding
-  ) => void;
-  // Function to redirect the client.
-  redirect: (statusCode: number, location: string) => void;
-  // Function to stream multipart form data.
-  streamMultipartData: (options: {
-    cbPartStart: (headers: IncomingHttpHeaders, name: string | null, filename: string | null) => void;
-    cbPartChunk: (chunk: Buffer) => void;
-    cbPartEnd: () => void;
-    cbFinished: (err: Error | string | null) => void;
-  }) => void;
-  // Function to create an ETag for a tiddler.
-  makeTiddlerEtag: (options: { bag_name: string; tiddler_id: string }) => string;
-  // The authenticated user object, if available.
-  authenticatedUser: any;
-  // Authenticated username, if available.
-  authenticatedUsername?: string;
-  // Request authorization type, e.g., "readers" or "writers".
-  authorizationType: string;
-  // Whether anonymous access is allowed.
-  allowAnon: boolean;
-  // Flag indicating if anonymous access is configured.
-  anonAccessConfigured: boolean;
-  // Whether anonymous read operations are allowed.
-  allowAnonReads: boolean;
-  // Whether anonymous write operations are allowed.
-  allowAnonWrites: boolean;
-  // Flag indicating if the anonymous configuration should be exposed (for admin users).
-  showAnonConfig: boolean;
-  // Indicates if this request is from the first guest user.
-  firstGuestUser: boolean;
-  // Optional route parameters extracted from URL pattern matching.
-  params?: string[];
-  // Optional parsed body data.
-  data?: string | Buffer | any;
-}
-
 export class Router {
   routes: Route[] = [
     {
