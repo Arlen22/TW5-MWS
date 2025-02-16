@@ -1,11 +1,11 @@
-import { IncomingHttpHeaders, OutgoingHttpHeaders, ServerResponse } from "node:http";
-import { Router, Streamer } from "./server";
+import { IncomingHttpHeaders, OutgoingHttpHeaders } from "node:http";
+import { Streamer } from "./server";
 import { StateObject } from './StateObject';
 import { createHash } from "node:crypto";
 import * as zlib from "node:zlib";
 import { ok } from "node:assert";
 import { promisify } from "node:util";
-import * as querystring from "node:querystring";
+import { Router } from "./router";
 /**
 Options include:
 - `cbPartStart(headers,name,filename)` - invoked when a file starts being received
@@ -236,3 +236,18 @@ interface Server {
 
 
 export function is<T>(a: any, b: boolean): a is T { return b; }
+
+/** Initiates a timer that must get cancelled before the current turn of the event loop ends */
+export class SyncCheck {
+  done;
+  constructor() {
+    let cancelled = false;
+    const error = new Error("SyncCheck was not completed before the current turn of the event loop ended");
+    process.nextTick(() => {
+      if (cancelled) return;
+      console.log(error);
+      process.exit(1);
+    });
+    this.done = () => { cancelled = true };
+  }
+}

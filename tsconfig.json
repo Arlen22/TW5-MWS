@@ -105,4 +105,5 @@
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
   "include": ["src/**/*.ts", "scratch/mws-server.ts"],
+  "exclude":["src/oldroutes/**/*"]
 }

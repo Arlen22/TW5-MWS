@@ -1,16 +1,14 @@
 import * as queryString from 'node:querystring';
 import { Readable } from 'stream';
 import { recieveMultipartData as readMultipartData, sendResponse } from './helpers';
-import { RouteMatch, Router, Streamer } from './server';
-import { IncomingHttpHeaders } from 'node:http';
+import { Streamer } from './server';
 import { AuthState } from './AuthState';
 import { PassThrough } from 'node:stream';
-import { AllowedMethods, BodyFormat } from './routes';
-
+import { AllowedMethod, BodyFormat, RouteMatch, Router } from './router';
 
 // This class abstracts the request/response cycle into a single object.
 // It hides most of the details from the routes, allowing us to easily change the underlying server implementation.
-export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMethods = AllowedMethods, R extends RouteMatch<any>[] = RouteMatch<any>[]> {
+export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMethod = AllowedMethod, R extends RouteMatch<any>[] = RouteMatch<any>[]> {
 
   get url() { return this.streamer.url; }
   get method(): M { return this.streamer.method as M; }
@@ -71,7 +69,7 @@ export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMet
   }
 
   /** type-narrowing helper function. This affects anywhere T is used. */
-  isBodyFormat<T extends BodyFormat>(format: T): this is StateObject<T> {
+  isBodyFormat<T extends F>(format: T): this is StateObject<T> {
     return this.bodyFormat as BodyFormat === format;
   }
 

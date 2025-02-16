@@ -1,12 +1,12 @@
 
-import { AllowedMethods, RouteMatch, Router, Streamer } from "./server";
-import rootRoute from "./routes";
-import { is } from "./helpers";
+import { Streamer } from "./server";
+import { AllowedMethod, AllowedMethods, RouteMatch, Router, } from "./router";
+import { StateObject } from "./StateObject";
 
 // This is a mapping of the methods to the auth levels needed to access them.
 // since the root route defines the methods allowed, we just import the type from there.
 
-const authLevelNeededForMethod: Record<AllowedMethods, "readers" | "writers" | undefined> = {
+const authLevelNeededForMethod: Record<AllowedMethod, "readers" | "writers" | undefined> = {
   "GET": "readers",
   "OPTIONS": "readers",
   "HEAD": "readers",
@@ -29,22 +29,23 @@ export class AuthState {
   constructor(private router: Router) {
 
   }
-
+  /** This is called as soon as the router recieves the request */
   async checkStreamer(streamer: Streamer) {
     this.streamer = streamer;
-    if (is<AllowedMethods>(this.streamer.method, !rootRoute.method.includes(streamer.method as any)))
-      throw streamer.sendString(405, {}, "Method not recognized", "utf8");
     this.parseCookieString(this.streamer.headers.cookie ?? "");
     this.authLevelNeeded = authLevelNeededForMethod[this.streamer.method] ?? "writers";
-    this.user = this.getUserBySessionId(this.cookies.session ?? "");
+    this.user = await this.getUserBySessionId(this.cookies.session ?? "");
   }
+  /** This is called after the routes are matched in the request, but before the request body is recieved. */
   async checkMatchedRoutes(routes: RouteMatch[]) {
-    console.log("Checking route");
-
     routes.forEach(match => {
       if (!this.router.csrfDisable && !match.route.useACL.csrfDisable && this.authLevelNeeded === "writers" && this.streamer.headers["x-requested-with"] !== "TiddlyWiki")
         throw this.streamer.sendString(403, {}, "'X-Requested-With' header required to login to '" + this.router.servername + "'", "utf8");
     })
+  }
+  /** This is called right before handing the request off to the route's handler. */
+  async checkStateObject(state: StateObject) {
+
   }
 
   parseCookieString(cookieString: string) {
@@ -59,7 +60,8 @@ export class AuthState {
     });
   }
 
-  getUserBySessionId(session_id: string) {
+  async getUserBySessionId(session_id: string) {
+    // this would be a database call
     return {
       user_id: 1,
       username: "admin",
