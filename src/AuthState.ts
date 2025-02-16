@@ -1,7 +1,12 @@
 
-import { Route, Router, Streamer } from "./server";
+import { AllowedMethods, RouteMatch, Router, Streamer } from "./server";
+import rootRoute from "./routes";
+import { is } from "./helpers";
 
-const authLevelNeededForMethod: Record<string, "readers" | "writers" | undefined> = {
+// This is a mapping of the methods to the auth levels needed to access them.
+// since the root route defines the methods allowed, we just import the type from there.
+
+const authLevelNeededForMethod: Record<AllowedMethods, "readers" | "writers" | undefined> = {
   "GET": "readers",
   "OPTIONS": "readers",
   "HEAD": "readers",
@@ -9,6 +14,11 @@ const authLevelNeededForMethod: Record<string, "readers" | "writers" | undefined
   "POST": "writers",
   "DELETE": "writers"
 } as const;
+
+export interface AuthStateRouteACL {
+  csrfDisable?: boolean;
+  entityName?: "recipe" | "bag",
+}
 
 export class AuthState {
   private streamer!: Streamer;
@@ -21,16 +31,20 @@ export class AuthState {
   }
 
   async checkStreamer(streamer: Streamer) {
-    console.log("Check request headers");
     this.streamer = streamer;
+    if (is<AllowedMethods>(this.streamer.method, !rootRoute.method.includes(streamer.method as any)))
+      throw streamer.sendString(405, {}, "Method not recognized", "utf8");
     this.parseCookieString(this.streamer.headers.cookie ?? "");
     this.authLevelNeeded = authLevelNeededForMethod[this.streamer.method] ?? "writers";
     this.user = this.getUserBySessionId(this.cookies.session ?? "");
   }
-  async checkRoute(route: Route) {
+  async checkMatchedRoutes(routes: RouteMatch[]) {
     console.log("Checking route");
-    if (!this.router.csrfDisable && !route.csrfDisable && this.authLevelNeeded === "writers" && this.streamer.headers["x-requested-with"] !== "TiddlyWiki")
-      throw this.streamer.sendString(403, {}, "'X-Requested-With' header required to login to '" + this.router.servername + "'", "utf8");
+
+    routes.forEach(match => {
+      if (!this.router.csrfDisable && !match.route.useACL.csrfDisable && this.authLevelNeeded === "writers" && this.streamer.headers["x-requested-with"] !== "TiddlyWiki")
+        throw this.streamer.sendString(403, {}, "'X-Requested-With' header required to login to '" + this.router.servername + "'", "utf8");
+    })
   }
 
   parseCookieString(cookieString: string) {
@@ -51,7 +65,7 @@ export class AuthState {
       username: "admin",
     }
   }
-  toDebug(){
+  toDebug() {
     return this.user.username;
   }
 }

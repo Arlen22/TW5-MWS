@@ -7,8 +7,9 @@ import { is, recieveMultipartData } from './helpers';
 import { StateObject } from './StateObject';
 import { createReadStream, readFileSync } from 'node:fs';
 import { Writable } from 'node:stream';
-import { AuthState } from './AuthState';
+import { AuthState, AuthStateRouteACL } from './AuthState';
 import * as queryString from 'querystring';
+import rootRoute, { AllowedMethods, BodyFormat, Route } from './routes';
 
 interface IncomingHttpHeaders extends NodeIncomingHeaders {
   "accept-encoding"?: string;
@@ -30,34 +31,13 @@ export function setupServers(router: Router, opts: ListenerOptions[]) {
 export const SYMBOL_IGNORE_ERROR: unique symbol = Symbol("IGNORE_ERROR");
 export const STREAM_ENDED: unique symbol = Symbol("STREAM_ENDED");
 
-export type BodyFormat = "stream" | "string" | "buffer" | "www-form-urlencoded";
-
-
-export interface Route {
-  useACL: any;
-  method: string;
-  entityName: any;
-  csrfDisable: any;
-  bodyFormat: BodyFormat;
-  path: RegExp;
-  handler: (state: StateObject<BodyFormat>) => Promise<void>;
+export interface RouteMatch<Params extends string[] = string[]> {
+  route: Route;
+  params: Params;
+  remainingPath: string;
 }
 
 export class Router {
-  routes: Route[] = [
-    {
-      bodyFormat: "string",
-      csrfDisable: false,
-      entityName: "tiddler",
-      method: "GET",
-      path: /.*/,
-      useACL: false,
-      handler: async (state) => {
-        console.log("Handling tiddler route");
-        state.sendFile(200, {}, { reqpath: "./index.html", root: process.cwd(), });
-      },
-    }
-  ];
   pathPrefix: string = "";
   enableBrowserCache: boolean = true;
   enableGzip: boolean = true;
@@ -72,13 +52,13 @@ export class Router {
 
     const authState = new AuthState(this);
 
+
     await authState.checkStreamer(streamer);
 
-    const routeData = this.findRoute(streamer, this.pathPrefix);
-    if (!routeData) return streamer.sendString(404, {}, "Not found", "utf8");
-    const { route, params } = routeData;
+    const matchedRoutes = this.findRoute(streamer);
+    if (!matchedRoutes.length) return streamer.sendString(404, {}, "Not found", "utf8");
 
-    await authState.checkRoute(route);
+    await authState.checkMatchedRoutes(matchedRoutes);
 
     // Optionally output debug info
     if (this.get("debug-level") !== "none") {
@@ -86,14 +66,17 @@ export class Router {
       console.log("Request headers:", JSON.stringify(streamer.headers));
       console.log(authState.toDebug());
     }
-    const state = new StateObject(streamer, route, params, authState, this);
+
+    const bodyFormat = matchedRoutes.find(e => e.route.bodyFormat)?.route.bodyFormat || "string";
+
+    const state = new StateObject(streamer, matchedRoutes, bodyFormat, authState, this);
     const method = streamer.method;
 
     // anything that sends a response before this should have thrown, but just in case
     if (streamer.headersSent) return;
 
-    if (route.bodyFormat === "stream" || ["GET", "HEAD"].includes(method))
-      return await route.handler(state);
+    if (state.isBodyFormat("stream") || ["GET", "HEAD"].includes(method))
+      return await this.handleRoute(state, matchedRoutes);
 
     const buffer = await state.readBody();
     if (state.isBodyFormat("string")) {
@@ -103,27 +86,70 @@ export class Router {
     } else if (state.isBodyFormat("buffer")) {
       state.data = buffer;
     } else {
-      return state.sendString(400, {}, "Invalid bodyFormat: " + route.bodyFormat, "utf8");
+      return state.sendString(400, {}, "Invalid bodyFormat: " + state.bodyFormat, "utf8");
     }
-    return await route.handler(state);
+    return await this.handleRoute(state, matchedRoutes);
 
   }
 
-  findRoute(streamer: Streamer, pathPrefix: string): { route: Route; params: string[]; } | null {
-    const { method, url } = streamer;
-    let testPath = url.pathname || "/";
-    if (pathPrefix && testPath.startsWith(pathPrefix)) {
-      testPath = testPath.slice(pathPrefix.length) || "/";
+  async handleRoute(state: StateObject<BodyFormat>, route: RouteMatch[]) {
+    let result: any = state;
+    for (const match of route) {
+      result = await match.route.handler(result);
+      if (state.headersSent) return;
     }
-    for (const potentialRoute of this.routes) {
+  }
+
+  findRouteRecursive(
+    routes: Route[],
+    testPath: string,
+    method: AllowedMethods
+  ): RouteMatch[] {
+    for (const potentialRoute of routes) {
+      // Skip if the method doesn't match.
+      if (!potentialRoute.method.includes(method)) continue;
+
+      // Try to match the path.
       const match = potentialRoute.path.exec(testPath);
-      if (match && (method === potentialRoute.method ||
-        (method === "POST" && potentialRoute.method === "PUT"))) {
-        return { route: potentialRoute, params: match.slice(1) };
+
+      if (match) {
+        // The matched portion of the path.
+        const matchedPortion = match[0];
+        // Remove the matched portion from the testPath.
+        const remainingPath = testPath.slice(matchedPortion.length) || "/";
+
+        const result = {
+          route: potentialRoute,
+          params: match.slice(1),
+          remainingPath,
+        };
+
+        // If there are inner routes, try to match them recursively.
+        if (potentialRoute.childRoutes && potentialRoute.childRoutes.length > 0) {
+          const innerMatch = this.findRouteRecursive(
+            potentialRoute.childRoutes,
+            remainingPath,
+            method
+          );
+          return [result, ...innerMatch];
+        } else {
+          return [result];
+        }
       }
     }
-    return null;
+    return [];
   }
+
+  // Top-level function that starts matching from the root routes.
+  // Notice that the pathPrefix is assumed to have been handled beforehand.
+  findRoute(streamer: Streamer,): RouteMatch[] {
+    const { method, url } = streamer;
+    let testPath = url.pathname || "/";
+    if (this.pathPrefix && testPath.startsWith(this.pathPrefix))
+      testPath = testPath.slice(this.pathPrefix.length) || "/";
+    return this.findRouteRecursive([rootRoute], testPath, method);
+  }
+
 
 }
 
@@ -136,7 +162,7 @@ export type StreamerChunk = { data: string, encoding: NodeJS.BufferEncoding } | 
  */
 export class Streamer {
   host: string;
-  method: string;
+  method: AllowedMethods;
   url: URL;
   headers: IncomingHttpHeaders;
   constructor(
@@ -152,6 +178,9 @@ export class Streamer {
     if (!req.headers.host) throw new Error("This should never happen");
     if (!req.method) throw new Error("This should never happen");
     if (!req.url?.startsWith("/")) throw new Error("This should never happen");
+    //https://httpwg.org/specs/rfc9110.html#status.501
+    if (!is<AllowedMethods>(req.method, rootRoute.method.includes(req.method as any)))
+      throw this.sendString(501, {}, "Method not supported", "utf8");
     this.host = req.headers.host;
     this.method = req.method;
     this.url = new URL(`https://${req.headers.host}${req.url}`);
@@ -291,7 +320,7 @@ export class Streamer {
     return STREAM_ENDED;
   }
 
-  get headersSent(){
+  get headersSent() {
     return this.res.headersSent;
   }
 }
@@ -328,7 +357,7 @@ function listenHandler(server: http2.Http2SecureServer | Server) {
     process.exitCode = 2;
 
     var addr = server.address();
-    var bind = !addr ? "unknown" : typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
+    var bind = !addr ? "unknown" : typeof addr === 'string' ? 'pipe ' + addr : addr.address + ":" + addr.port;
 
     console.log('Server listening on ' + bind + ' 🚀');
     process.exitCode = 0;

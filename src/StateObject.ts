@@ -1,17 +1,19 @@
 import * as queryString from 'node:querystring';
 import { Readable } from 'stream';
 import { recieveMultipartData as readMultipartData, sendResponse } from './helpers';
-import { BodyFormat, Route, Router, Streamer } from './server';
+import { RouteMatch, Router, Streamer } from './server';
 import { IncomingHttpHeaders } from 'node:http';
 import { AuthState } from './AuthState';
 import { PassThrough } from 'node:stream';
+import { AllowedMethods, BodyFormat } from './routes';
+
 
 // This class abstracts the request/response cycle into a single object.
 // It hides most of the details from the routes, allowing us to easily change the underlying server implementation.
-export class StateObject<F extends BodyFormat = BodyFormat, P extends string[] = string[]> {
+export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMethods = AllowedMethods, R extends RouteMatch<any>[] = RouteMatch<any>[]> {
 
   get url() { return this.streamer.url; }
-  get method() { return this.streamer.method; }
+  get method(): M { return this.streamer.method as M; }
   get headers() { return this.streamer.headers; }
   get host() { return this.streamer.host; }
   get urlInfo() { return this.streamer.url; }
@@ -31,12 +33,9 @@ export class StateObject<F extends BodyFormat = BodyFormat, P extends string[] =
 
   sendResponse = sendResponse.bind(this.router, this);
 
-
   get enableBrowserCache() { return this.router.enableBrowserCache; }
   get enableGzip() { return this.router.enableGzip; }
   get pathPrefix() { return this.router.pathPrefix; }
-  get csrfDisable() { return this.route.csrfDisable; }
-  get bodyFormat() { return this.route.bodyFormat as F; }
 
   queryParameters = queryString.parse(this.url.search.slice(1));
   data?:
@@ -45,13 +44,17 @@ export class StateObject<F extends BodyFormat = BodyFormat, P extends string[] =
     F extends "www-form-urlencoded" ? queryString.ParsedUrlQuery :
     F extends "stream" ? Readable :
     never;
+  params: string[][];
   constructor(
     private streamer: Streamer,
-    private route: Route,
-    public params: P,
+    /** The array of Route tree nodes the request matched. */
+    route: R,
+    /** The bodyformat that ended up taking precedence. This should be correctly typed. */
+    public bodyFormat: F,
     public authState: AuthState,
     private router: Router
   ) {
+    this.params = route.map(r => r.params);
   }
 
   wiki: any;
