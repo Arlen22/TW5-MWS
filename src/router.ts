@@ -61,7 +61,7 @@ export class Router {
     if (state.isBodyFormat("string")) {
       state.data = (await state.readBody()).toString("utf8");
     } else if (state.isBodyFormat("www-form-urlencoded")) {
-      state.data = querystring.parse((await state.readBody()).toString("utf8"));
+      state.data = new URLSearchParams((await state.readBody()).toString("utf8"));
     } else if (state.isBodyFormat("buffer")) {
       state.data = await state.readBody();
     } else {

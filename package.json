@@ -6,6 +6,7 @@
     "start": "npx tsx src/server.ts"
   },
   "dependencies": {
+    "@serenity-kit/opaque": "^0.8.4",
     "@types/mime-types": "^2.1.4",
     "@types/node": "^22.13.1",
     "@types/send": "^0.17.4",

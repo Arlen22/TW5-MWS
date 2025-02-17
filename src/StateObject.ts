@@ -39,7 +39,7 @@ export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMet
   data?:
     F extends "string" ? string :
     F extends "buffer" ? Buffer :
-    F extends "www-form-urlencoded" ? queryString.ParsedUrlQuery :
+    F extends "www-form-urlencoded" ? URLSearchParams :
     F extends "stream" ? Readable :
     never;
   params: string[][];

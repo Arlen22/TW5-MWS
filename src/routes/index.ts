@@ -16,7 +16,7 @@ export default function RootRoute(router: Router) {
     handler: async (state) => { return state; },
   });
 
-  AuthRoutes(router, root);
+  (AuthRoutes as any)(router, root);
 
   return root;
 
