@@ -1,4 +1,3 @@
-import * as queryString from 'node:querystring';
 import { Readable } from 'stream';
 import { recieveMultipartData as readMultipartData, sendResponse } from './helpers';
 import { Streamer } from './server';
@@ -35,8 +34,8 @@ export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMet
   get enableGzip() { return this.router.enableGzip; }
   get pathPrefix() { return this.router.pathPrefix; }
 
-  queryParameters = queryString.parse(this.url.search.slice(1));
-  data?:
+  queryParameters = this.url.searchParams;
+  data!:
     F extends "string" ? string :
     F extends "buffer" ? Buffer :
     F extends "www-form-urlencoded" ? URLSearchParams :
@@ -69,7 +68,7 @@ export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMet
   }
 
   /** type-narrowing helper function. This affects anywhere T is used. */
-  isBodyFormat<T extends F>(format: T): this is StateObject<T> {
+  isBodyFormat<T extends F>(format: T): this is StateObject<T, M, R> {
     return this.bodyFormat as BodyFormat === format;
   }
 

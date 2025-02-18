@@ -1,11 +1,12 @@
 import { ok } from "assert";
-import { rootRoute } from ".";
-import { Router } from "../router";
+import { rootRoute } from "../router";
 import * as opaque from "@serenity-kit/opaque";
+import { z } from "zod";
 
-export default function AuthRoutes(router: Router, parent: rootRoute) {
 
-  const authRoute = router.defineRoute(parent, {
+export default function AuthRoutes(parent: rootRoute) {
+
+  const authRoute = parent.defineRoute({
     useACL: {},
     method: ["GET", "HEAD", "POST", "PUT"],
     bodyFormat: undefined,
@@ -14,15 +15,18 @@ export default function AuthRoutes(router: Router, parent: rootRoute) {
       return state;
     },
   });
+
+  type authRoute = typeof authRoute;
+
+
   const userIdentifiers = new Map();
   const registrationRecords = new Map();
   const userLoginStates = new Map();
   const userSessionKeys = new Map();
 
-  router.defineRoute(authRoute, {
+  authRoute.defineRoute({
     useACL: {},
     method: ["GET", "HEAD"],
-    bodyFormat: undefined,
     path: /^\/register/,
     handler: async (state) => {
       return state.sendFile(200, {}, {
@@ -32,20 +36,25 @@ export default function AuthRoutes(router: Router, parent: rootRoute) {
     },
   });
 
-  router.defineRoute(authRoute, {
+
+  authRoute.defineRoute( {
     useACL: {},
     method: ["POST"],
     bodyFormat: "www-form-urlencoded",
     path: /^\/register\/1/,
     handler: async (state) => {
-      ok(state.data instanceof URLSearchParams);
-      const username = state.data.get("username");
-      ok(typeof username === "string");
+      ok(state.isBodyFormat("www-form-urlencoded"));
+      const args = Object.fromEntries(state.data);
+      const { success } = z.object({
+        username: z.string(),
+        registrationRequest: z.string(),
+      }).safeParse(args);
+      if (!success) { return state.sendEmpty(400, {}); }
+
+      const { username, registrationRequest } = args;
+
       const userIdentifier = userIdentifiers.get(username);
       ok(typeof userIdentifier === "string");
-
-      const registrationRequest = state.data.get("registrationRequest");
-      ok(typeof registrationRequest === "string");
 
       const { registrationResponse } = opaque.server.createRegistrationResponse({
         serverSetup,
@@ -56,7 +65,7 @@ export default function AuthRoutes(router: Router, parent: rootRoute) {
     },
   });
 
-  router.defineRoute(authRoute, {
+  const testroute = authRoute.defineRoute({
     useACL: {},
     method: ["POST"],
     bodyFormat: "www-form-urlencoded",
@@ -76,7 +85,8 @@ export default function AuthRoutes(router: Router, parent: rootRoute) {
       return state.sendEmpty(200, {});
     },
   });
-  router.defineRoute(authRoute, {
+
+  authRoute.defineRoute({
     useACL: {},
     method: ["GET", "HEAD"],
     bodyFormat: undefined,
@@ -89,10 +99,10 @@ export default function AuthRoutes(router: Router, parent: rootRoute) {
     },
   });
 
-  router.defineRoute(authRoute, {
+  authRoute.defineRoute({
     useACL: {},
     method: ["POST"],
-    bodyFormat: "string",
+    bodyFormat: "www-form-urlencoded",
     path: /^\/login\/1/,
     handler: async (state) => {
       ok(state.data instanceof URLSearchParams);
@@ -119,10 +129,10 @@ export default function AuthRoutes(router: Router, parent: rootRoute) {
     },
   });
 
-  router.defineRoute(authRoute, {
+  authRoute.defineRoute({
     useACL: {},
     method: ["POST"],
-    bodyFormat: "string",
+    bodyFormat: "www-form-urlencoded",
     path: /^\/login\/2/,
     handler: async (state) => {
       ok(state.data instanceof URLSearchParams);

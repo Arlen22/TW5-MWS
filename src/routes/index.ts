@@ -1,25 +1,11 @@
-import { AllowedMethods, RouteParent, Router } from "../router";
-import { StateObject } from "../StateObject";
+import { rootRoute } from "../router";
 import AuthRoutes from "./auth";
 
-export default function RootRoute(router: Router) {
-
-  /** This is the root route. It defines the maximum allowed parameters. */
-  const root = router.defineRoute({
-    method: AllowedMethods,
-    // this one isn't actually called. it's just for typing.
-    handler: async (state) => { return state; },
-  } as RouteParent<StateObject>, {
-    useACL: {},
-    method: AllowedMethods,
-    path: /^/,
-    handler: async (state) => { return state; },
-  });
-
-  (AuthRoutes as any)(router, root);
-
-  return root;
-
+/** 
+ * The root route is specially defined in router.ts, 
+ * so we don't really need to do anything here except 
+ * setup the child routes. 
+ */
+export default function RootRoute(root: rootRoute) {
+  AuthRoutes(root);
 }
-
-export type rootRoute = ReturnType<typeof RootRoute>;
