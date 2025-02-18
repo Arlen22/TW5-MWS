@@ -4,10 +4,11 @@ import { Streamer } from './server';
 import { AuthState } from './AuthState';
 import { PassThrough } from 'node:stream';
 import { AllowedMethod, BodyFormat, RouteMatch, Router } from './router';
+import { z } from 'zod';
 
 // This class abstracts the request/response cycle into a single object.
 // It hides most of the details from the routes, allowing us to easily change the underlying server implementation.
-export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMethod = AllowedMethod, R extends RouteMatch<any>[] = RouteMatch<any>[]> {
+export class StateObject<B extends BodyFormat = BodyFormat, M extends AllowedMethod = AllowedMethod, R extends RouteMatch<any>[] = RouteMatch<any>[], D = unknown> {
 
   get url() { return this.streamer.url; }
   get method(): M { return this.streamer.method as M; }
@@ -36,18 +37,18 @@ export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMet
 
   queryParameters = this.url.searchParams;
   data!:
-    F extends "string" ? string :
-    F extends "buffer" ? Buffer :
-    F extends "www-form-urlencoded" ? URLSearchParams :
-    F extends "stream" ? Readable :
-    never;
+    B extends "string" ? string :
+    B extends "buffer" ? Buffer :
+    B extends "www-form-urlencoded" ? URLSearchParams :
+    B extends "stream" ? Readable :
+    D;
   params: string[][];
   constructor(
     private streamer: Streamer,
     /** The array of Route tree nodes the request matched. */
     route: R,
     /** The bodyformat that ended up taking precedence. This should be correctly typed. */
-    public bodyFormat: F,
+    public bodyFormat: B,
     public authState: AuthState,
     private router: Router
   ) {
@@ -58,6 +59,12 @@ export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMet
   boot: any;
   server: any;
 
+  zod<T extends z.ZodTypeAny>(schema: T): this is { data: z.infer<T> } {
+    const { success, data } = z.any().pipe(schema).safeParse(this.data);
+    if (!success) return false;
+    this.data = data;
+    return true;
+  }
 
   makeTiddlerEtag(options: { bag_name: string; tiddler_id: string; }) {
     if (options.bag_name || options.tiddler_id) {
@@ -68,7 +75,7 @@ export class StateObject<F extends BodyFormat = BodyFormat, M extends AllowedMet
   }
 
   /** type-narrowing helper function. This affects anywhere T is used. */
-  isBodyFormat<T extends F>(format: T): this is StateObject<T, M, R> {
+  isBodyFormat<T extends B, S extends { [K in B]: StateObject<K, M, R, D> }[T]>(format: T): this is S {
     return this.bodyFormat as BodyFormat === format;
   }
 

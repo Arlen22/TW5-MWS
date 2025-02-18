@@ -51,7 +51,7 @@ export class Streamer {
     this.host = req.headers.host;
     this.method = req.method;
     this.url = new URL(`https://${req.headers.host}${req.url}`);
-
+    req.complete
   }
 
   get reader(): Readable { return this.req; }
@@ -83,6 +83,7 @@ export class Streamer {
 
   readBody = () => new Promise<Buffer>((resolve: (chunk: Buffer) => void) => {
     const chunks: Buffer[] = [];
+    
     this.reader.on('data', chunk => chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk));
     this.reader.on('end', () => resolve(Buffer.concat(chunks)));
   });

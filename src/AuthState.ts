@@ -37,8 +37,8 @@ export class AuthState {
     this.user = await this.getUserBySessionId(this.cookies.session ?? "");
   }
   /** This is called after the routes are matched in the request, but before the request body is recieved. */
-  async checkMatchedRoutes(routes: RouteMatch[]) {
-    routes.forEach(match => {
+  async checkMatchedRoutes(routePath: RouteMatch[]) {
+    routePath.forEach(match => {
       if (!this.router.csrfDisable && !match.route.useACL.csrfDisable && this.authLevelNeeded === "writers" && this.streamer.headers["x-requested-with"] !== "TiddlyWiki")
         throw this.streamer.sendString(403, {}, "'X-Requested-With' header required to login to '" + this.router.servername + "'", "utf8");
     })

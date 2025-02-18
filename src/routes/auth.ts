@@ -40,15 +40,17 @@ export default function AuthRoutes(parent: rootRoute) {
   authRoute.defineRoute( {
     useACL: {},
     method: ["POST"],
-    bodyFormat: "www-form-urlencoded",
+    bodyFormat: "www-form-urlencoded-object",
     path: /^\/register\/1/,
+    zod: z.object({}),
     handler: async (state) => {
-      ok(state.isBodyFormat("www-form-urlencoded"));
+      ok(state.isBodyFormat("www-form-urlencoded-object"));
       const args = Object.fromEntries(state.data);
       const { success } = z.object({
         username: z.string(),
         registrationRequest: z.string(),
       }).safeParse(args);
+      z.object({})
       if (!success) { return state.sendEmpty(400, {}); }
 
       const { username, registrationRequest } = args;
@@ -65,12 +67,17 @@ export default function AuthRoutes(parent: rootRoute) {
     },
   });
 
-  const testroute = authRoute.defineRoute({
+  const test2 = authRoute.defineRoute({
     useACL: {},
     method: ["POST"],
-    bodyFormat: "www-form-urlencoded",
+    bodyFormat: "www-form-urlencoded-object",
+    zod: z.object({
+      username: z.string(),
+      registrationRequest: z.string(),
+    }),
     path: /^\/register\/2/,
     handler: async (state) => {
+
       // still have to make this actually take the bodyFormat into account
       ok(state.data instanceof URLSearchParams);
       const username = state.data.get("username");
@@ -85,6 +92,8 @@ export default function AuthRoutes(parent: rootRoute) {
       return state.sendEmpty(200, {});
     },
   });
+  type t2 = z.infer<typeof test2.zod & {}>;
+  
 
   authRoute.defineRoute({
     useACL: {},
